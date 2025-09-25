@@ -9,7 +9,8 @@ import {
   User,
   Wifi,
   WifiOff,
-  Users
+  Users,
+  Clock
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 
@@ -28,8 +29,17 @@ export default function AdminSistem() {
         const unsubscribe = onValue(petaniRef, (snapshot) => {
           const petaniData = snapshot.val();
           if (petaniData) {
-            data[i] = petaniData;
+            // Check device status based on last_seen
+            const now = new Date();
+            const lastSeenTime = new Date(petaniData.last_seen);
+            const diffInMinutes = (now - lastSeenTime) / (1000 * 60);
+            const status = diffInMinutes < 1 ? 'online' : 'offline';
+            data[i] = { ...petaniData, device_status: status };
             setPetaniData({ ...data });
+          } else {
+             // Handle case where data is not available
+             data[i] = { device_status: 'offline' };
+             setPetaniData({ ...data });
           }
           setLoading(false);
         });
@@ -43,16 +53,16 @@ export default function AdminSistem() {
     return cleanup;
   }, []);
 
-  const getMoistureColor = (value) => {
-    if (value < 30) return "text-red-500";
-    if (value < 60) return "text-orange-500";
-    return "text-green-500";
-  };
-
   const getTemperatureColor = (value) => {
     if (value > 30) return "text-red-500";
     if (value < 18) return "text-blue-500";
     return "text-green-500";
+  };
+
+  const getMoistureColor = (value) => {
+    if (value < 40) return "text-red-500";
+    if (value > 60) return "text-green-500";
+    return "text-blue-500";
   };
 
   const getStatusColor = (status) => {
@@ -94,6 +104,8 @@ export default function AdminSistem() {
       </div>
     );
   }
+
+  const selectedPetaniData = petaniData[selectedPetani] || {};
 
   return (
     <ProtectedRoute role="admin">
@@ -143,22 +155,22 @@ export default function AdminSistem() {
           </div>
 
           {/* Data Petani Terpilih */}
-          {petaniData[selectedPetani] ? (
+          {selectedPetaniData.last_seen ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               {/* Temperature Card */}
               <div className="bg-white rounded-2xl shadow-md border border-green-100 hover:shadow-lg transition-shadow">
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-800">Temperatur</h3>
-                    <Thermometer className="text-red-500" size={24} />
+                    <Thermometer className={getTemperatureColor(selectedPetaniData.temperature)} size={24} />
                   </div>
-                  <div className={`text-5xl font-bold ${getTemperatureColor(petaniData[selectedPetani].temperature || 0)}`}>
-                    {petaniData[selectedPetani].temperature || 0}°C
+                  <div className={`text-5xl font-bold ${getTemperatureColor(selectedPetaniData.temperature)}`}>
+                    {selectedPetaniData.temperature || 0}°C
                   </div>
                   <p className="text-gray-500 mt-2 text-sm">
-                    {petaniData[selectedPetani].temperature > 30
+                    {selectedPetaniData.temperature > 30
                       ? "Suhu terlalu tinggi"
-                      : petaniData[selectedPetani].temperature < 18
+                      : selectedPetaniData.temperature < 18
                         ? "Suhu terlalu rendah"
                         : "Suhu optimal"}
                   </p>
@@ -170,15 +182,15 @@ export default function AdminSistem() {
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-800">Kelembaban Tanah</h3>
-                    <Droplet className="text-blue-500" size={24} />
+                    <Droplet className={getMoistureColor(selectedPetaniData.soil_moisture)} size={24} />
                   </div>
-                  <div className={`text-5xl font-bold ${getMoistureColor(petaniData[selectedPetani].soil_moisture || 0)}`}>
-                    {petaniData[selectedPetani].soil_moisture || 0}%
+                  <div className={`text-5xl font-bold ${getMoistureColor(selectedPetaniData.soil_moisture)}`}>
+                    {selectedPetaniData.soil_moisture || 0}%
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-2.5 mt-3">
                     <div
-                      className="bg-blue-500 h-2.5 rounded-full"
-                      style={{ width: `${petaniData[selectedPetani].soil_moisture || 0}%` }}
+                      className={`h-2.5 rounded-full ${getMoistureColor(selectedPetaniData.soil_moisture) === 'text-red-500' ? 'bg-red-500' : getMoistureColor(selectedPetaniData.soil_moisture) === 'text-blue-500' ? 'bg-blue-500' : 'bg-green-500'}`}
+                      style={{ width: `${selectedPetaniData.soil_moisture || 0}%` }}
                     ></div>
                   </div>
                 </div>
@@ -189,17 +201,17 @@ export default function AdminSistem() {
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-800">Status Perangkat</h3>
-                    {petaniData[selectedPetani].device_status === 'online' ? (
+                    {selectedPetaniData.device_status === 'online' ? (
                       <Wifi className="w-6 h-6 text-green-500" />
                     ) : (
                       <WifiOff className="w-6 h-6 text-red-500" />
                     )}
                   </div>
-                  <div className={`text-3xl font-bold capitalize ${getStatusColor(petaniData[selectedPetani].device_status)}`}>
-                    {petaniData[selectedPetani].device_status === 'online' ? 'Aktif' : 'Offline'}
+                  <div className={`text-3xl font-bold capitalize ${getStatusColor(selectedPetaniData.device_status)}`}>
+                    {selectedPetaniData.device_status === 'online' ? 'Aktif' : 'Tidak Aktif'}
                   </div>
                   <p className="text-sm text-gray-500 mt-1">
-                    {formatLastUpdate(petaniData[selectedPetani].last_seen)}
+                    {formatLastUpdate(selectedPetaniData.last_seen)}
                   </p>
                 </div>
               </div>
@@ -226,7 +238,7 @@ export default function AdminSistem() {
                       <User className="mr-2 text-blue-500" size={18} />
                       Petani {petaniId}
                     </h3>
-                    {petaniData[petaniId] ? (
+                    {petaniData[petaniId] && petaniData[petaniId].last_seen ? (
                       <>
                         <div className="flex items-center mb-3">
                           {petaniData[petaniId].device_status === 'online' ? (
@@ -240,16 +252,17 @@ export default function AdminSistem() {
                         </div>
                         <div className="grid grid-cols-2 gap-2 mb-3">
                           <div className="flex items-center">
-                            <Thermometer className="text-red-400 mr-1" size={14} />
+                            <Thermometer className={getTemperatureColor(petaniData[petaniId].temperature)} size={14} />
                             <span className="text-sm">{petaniData[petaniId].temperature || 0}°C</span>
                           </div>
                           <div className="flex items-center">
-                            <Droplet className="text-blue-400 mr-1" size={14} />
+                            <Droplet className={getMoistureColor(petaniData[petaniId].soil_moisture)} size={14} />
                             <span className="text-sm">{petaniData[petaniId].soil_moisture || 0}%</span>
                           </div>
                         </div>
                         <div className="flex items-center text-sm text-gray-500">
-                          {formatLastUpdate(petaniData[petaniId].last_seen)}
+                          <Clock className="mr-1 text-gray-400" size={14} />
+                          <span>{formatLastUpdate(petaniData[petaniId].last_seen)}</span>
                         </div>
                       </>
                     ) : (

@@ -33,6 +33,8 @@ export default function PetaniSistem({ params }) {
   const [lastSeen, setLastSeen] = useState("");
   const [expandedTime, setExpandedTime] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [manualWateringStatus, setManualWateringStatus] = useState(false);
+  const [restartingStatus, setRestartingStatus] = useState(false);
 
   const { id } = React.use(params);
   const petaniId = parseInt(id);
@@ -49,6 +51,7 @@ export default function PetaniSistem({ params }) {
     return () => clearInterval(interval);
   }, [currentDate]);
 
+  // Logika baru untuk memantau status perangkat
   useEffect(() => {
     const dataRef = ref(database, `petani_${petaniId}/realtime_data`);
     const unsubscribe = onValue(dataRef, (snapshot) => {
@@ -71,14 +74,28 @@ export default function PetaniSistem({ params }) {
         } else {
           setDeviceStatus("offline");
         }
-
-        const currentTime = new Date().toISOString();
-        set(ref(database, `petani_${petaniId}/realtime_data/device_status`), deviceStatus);
-        set(ref(database, `petani_${petaniId}/realtime_data/last_seen`), currentTime);
       }
     });
     return () => unsubscribe();
-  }, [petaniId, deviceStatus]);
+  }, [petaniId]);
+
+  useEffect(() => {
+    const controlRef = ref(database, `petani_${petaniId}/control/button_manual`);
+    const unsubscribe = onValue(controlRef, (snapshot) => {
+      const status = snapshot.val();
+      setManualWateringStatus(status === true);
+    });
+    return () => unsubscribe();
+  }, [petaniId]);
+
+  useEffect(() => {
+    const restartRef = ref(database, `petani_${petaniId}/control/button_restart`);
+    const unsubscribe = onValue(restartRef, (snapshot) => {
+      const status = snapshot.val();
+      setRestartingStatus(status === true);
+    });
+    return () => unsubscribe();
+  }, [petaniId]);
 
   useEffect(() => {
     const historyRef = ref(database, `petani_${petaniId}/history_data`);
@@ -132,9 +149,16 @@ export default function PetaniSistem({ params }) {
   };
 
   const getMoistureColor = (value) => {
-    if (value < 30) return "text-red-500";
-    if (value < 60) return "text-orange-500";
-    return "text-green-500";
+    if (value > 60) return "text-green-500";
+    if (value < 40) return "text-red-500";
+    return "text-blue-500";
+  };
+  
+  // Fungsi helper untuk mendapatkan warna bar kelembaban
+  const getMoistureBarColor = (value) => {
+      if (value > 60) return "bg-green-500";
+      if (value < 40) return "bg-red-500";
+      return "bg-blue-500";
   };
 
   const getTemperatureColor = (value) => {
@@ -142,28 +166,36 @@ export default function PetaniSistem({ params }) {
     if (value < 18) return "text-blue-500";
     return "text-green-500";
   };
+  
+  // Fungsi helper untuk mendapatkan warna logo temperatur
+  const getTemperatureLogoColor = (value) => {
+      if (value > 30) return "text-red-500";
+      if (value < 18) return "text-blue-500";
+      return "text-green-500";
+  };
 
+  // Logika baru untuk menentukan warna status berdasarkan deviceStatus
   const getStatusColor = (status) => {
     return status === 'online' ? 'text-green-600' : 'text-red-600';
   };
 
-  const handleManualWatering = () => {
-    const currentTime = new Date().toISOString();
-    const validKey = currentTime.replace(/[\.\#\$\/\[\]]/g, '_');
-
-    const wateringData = {
-      temperature,
-      soil_moisture: soilMoisture,
-      event: "manual_watering_start",
-      duration_minutes: 15,
-      timestamp: currentTime
-    };
-
-    set(ref(database, `petani_${petaniId}/history_data/${currentDate}/${validKey}`), wateringData);
+  const handleManualWatering = async () => {
+    try {
+      const newStatus = !manualWateringStatus;
+      await set(ref(database, `petani_${petaniId}/control/button_manual`), newStatus);
+    } catch (error) {
+      console.error("Error toggling manual watering status:", error);
+    }
   };
 
-  const handleRestart = () => {
-    // Logic for restarting the IoT device
+  const handleRestart = async () => {
+    try {
+      if (!restartingStatus) {
+        await set(ref(database, `petani_${petaniId}/control/button_restart`), true);
+      }
+    } catch (error) {
+      console.error("Error toggling restart status:", error);
+    }
   };
 
   const renderTimeEntryData = (date, timeKey) => {
@@ -174,7 +206,7 @@ export default function PetaniSistem({ params }) {
       <div className="bg-white p-4 rounded-xl mt-2 text-left shadow-sm border border-green-100">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between">
           <p className="text-lg flex items-center mb-2 sm:mb-0">
-            <Thermometer className="mr-2 text-red-400" size={20} />
+            <Thermometer className={`mr-2 ${getTemperatureColor(entryData.temperature)}`} size={20} />
             <span className={`font-medium ${getTemperatureColor(entryData.temperature)}`}>
               Temperatur: {entryData.temperature}°C
             </span>
@@ -210,14 +242,14 @@ export default function PetaniSistem({ params }) {
               <span className="text-md font-medium text-gray-800">
                 Kelembaban Tanah
               </span>
-              <Droplet className="text-blue-500" size={18} />
+              <Droplet className={`${getMoistureColor(entryData.soil_moisture)}`} size={18} />
             </div>
             <div className={`text-2xl font-bold ${getMoistureColor(entryData.soil_moisture)}`}>
               {entryData.soil_moisture}%
             </div>
             <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
               <div
-                className="bg-blue-500 h-1.5 rounded-full"
+                className={`${getMoistureBarColor(entryData.soil_moisture)} h-1.5 rounded-full`}
                 style={{ width: `${entryData.soil_moisture}%` }}
               ></div>
             </div>
@@ -232,6 +264,7 @@ export default function PetaniSistem({ params }) {
     );
   };
 
+  // Logika baru untuk format waktu terakhir terlihat
   const formatLastUpdate = (timestamp) => {
     if (!timestamp) return 'Belum ada update';
     const date = new Date(timestamp);
@@ -263,12 +296,18 @@ export default function PetaniSistem({ params }) {
     });
   };
 
+  const wateringButtonClass = manualWateringStatus ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700';
+  const wateringButtonText = manualWateringStatus ? 'Siram Manual ON' : 'Siram Manual OFF';
+
+  const restartButtonClass = restartingStatus ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700';
+  const restartButtonText = restartingStatus ? 'Restarting...' : 'Restart Device';
+
   return (
     <ProtectedRoute role="petani">
       <div className="min-h-screen flex flex-col bg-gradient-to-br from-green-100 via-emerald-50 to-green-200">
         <Navbar />
 
-        {/* Header Section (New) */}
+        {/* Header Section */}
         <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white py-10 pt-25 shadow-md">
           <div className="max-w-7xl mx-auto px-6 flex items-center gap-4">
             <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-lg">
@@ -287,7 +326,7 @@ export default function PetaniSistem({ params }) {
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800">Temperatur</h3>
-                  <Thermometer className="text-red-500" size={24} />
+                  <Thermometer className={`${getTemperatureLogoColor(temperature)}`} size={24} />
                 </div>
                 <div className={`text-5xl font-bold ${getTemperatureColor(temperature)}`}>
                   {temperature}°C
@@ -306,14 +345,14 @@ export default function PetaniSistem({ params }) {
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-800">Kelembaban Tanah</h3>
-                  <Droplet className="text-blue-500" size={24} />
+                  <Droplet className={`${getMoistureColor(soilMoisture)}`} size={24} />
                 </div>
                 <div className={`text-5xl font-bold ${getMoistureColor(soilMoisture)}`}>
                   {soilMoisture}%
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-2.5 mt-3">
                   <div
-                    className="bg-blue-500 h-2.5 rounded-full"
+                    className={`${getMoistureBarColor(soilMoisture)} h-2.5 rounded-full`}
                     style={{ width: `${soilMoisture}%` }}
                   ></div>
                 </div>
@@ -348,17 +387,18 @@ export default function PetaniSistem({ params }) {
                 <div className="space-y-3">
                   <button
                     onClick={handleManualWatering}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-xl font-medium flex items-center justify-center transition-colors"
+                    className={`w-full ${wateringButtonClass} text-white py-2 px-4 rounded-xl font-medium flex items-center justify-center transition-colors`}
                   >
                     <Sprout className="mr-2" size={18} />
-                    Siram Manual
+                    {wateringButtonText}
                   </button>
                   <button
                     onClick={handleRestart}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-xl font-medium flex items-center justify-center transition-colors"
+                    disabled={restartingStatus}
+                    className={`w-full ${restartButtonClass} text-white py-2 px-4 rounded-xl font-medium flex items-center justify-center transition-colors disabled:opacity-50`}
                   >
-                    <RefreshCw className="mr-2" size={18} />
-                    Restart Device
+                    <RefreshCw className={`mr-2 ${restartingStatus ? 'animate-spin' : ''}`} size={18} />
+                    {restartButtonText}
                   </button>
                 </div>
               </div>

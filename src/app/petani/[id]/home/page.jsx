@@ -39,7 +39,7 @@ export default function PetaniHome({ params }) {
   useEffect(() => {
     const fetchData = () => {
       setLoading(true);
-      
+
       // Reference untuk realtime data
       const realtimeRef = ref(database, `petani_${petaniId}/realtime_data`);
       const pencatatanRef = ref(database, `petani_${petaniId}/pencatatan`);
@@ -47,22 +47,40 @@ export default function PetaniHome({ params }) {
       // Listen untuk realtime data
       const unsubscribeRealtime = onValue(realtimeRef, (snapshot) => {
         const data = snapshot.val();
-        if (data) {
-          setDeviceStatus(data.device_status || 'offline');
-          setLastUpdate(data.last_seen || '');
+        if (data && data.last_seen) {
+          const lastSeenTime = new Date(data.last_seen);
+          const currentTime = new Date();
+          const diffInMinutes = (currentTime - lastSeenTime) / (1000 * 60);
+
+          if (diffInMinutes < 1) {
+            setDeviceStatus('online');
+          } else {
+            setDeviceStatus('offline');
+          }
+        } else {
+          setDeviceStatus('offline');
         }
+        setLoading(false);
       });
 
       // Listen untuk data pencatatan
       const unsubscribePencatatan = onValue(pencatatanRef, (snapshot) => {
         const data = snapshot.val();
         if (data) {
-          const records = Object.keys(data).length;
-          setRecordsCount(records);
+          const records = Object.values(data);
+          setRecordsCount(records.length);
+
+          if (records.length > 0) {
+            const sortedRecords = records.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            const lastRecord = sortedRecords[sortedRecords.length - 1];
+            setLastUpdate(lastRecord.createdAt);
+          } else {
+            setLastUpdate('');
+          }
         } else {
           setRecordsCount(0);
+          setLastUpdate('');
         }
-        setLoading(false);
       });
 
       // Cleanup function
@@ -78,13 +96,14 @@ export default function PetaniHome({ params }) {
   // Format waktu terakhir update
   const formatLastUpdate = (timestamp) => {
     if (!timestamp) return 'Belum ada update';
-    
+
     const date = new Date(timestamp);
     const now = new Date();
     const diffTime = Math.abs(now - date);
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
     const diffMinutes = Math.floor(diffTime / (1000 * 60));
+    const diffSeconds = Math.floor(diffTime / 1000);
 
     if (diffDays > 0) {
       return `${diffDays} hari yang lalu`;
@@ -92,8 +111,10 @@ export default function PetaniHome({ params }) {
       return `${diffHours} jam yang lalu`;
     } else if (diffMinutes > 0) {
       return `${diffMinutes} menit yang lalu`;
-    } else {
+    } else if (diffSeconds >= 0) {
       return 'Baru saja';
+    } else {
+      return 'Belum ada update';
     }
   };
 
@@ -105,6 +126,26 @@ export default function PetaniHome({ params }) {
       month: 'long',
       year: 'numeric'
     });
+  };
+
+  const getStatusColor = (status) => {
+    return status === 'online' ? 'text-green-600' : 'text-red-600';
+  };
+
+  const getStatusText = (status) => {
+    return status === 'online' ? 'Aktif' : 'Tidak Aktif';
+  };
+
+  const getStatusMessage = (status) => {
+    return status === 'online' ? 'Alat sedang aktif' : 'Alat sedang tidak aktif';
+  };
+
+  const getStatusIcon = (status) => {
+    return status === 'online' ? (
+      <Wifi className="w-6 h-6 text-green-500" />
+    ) : (
+      <WifiOff className="w-6 h-6 text-red-500" />
+    );
   };
 
   return (
@@ -145,11 +186,7 @@ export default function PetaniHome({ params }) {
             <div className="bg-white p-6 rounded-2xl shadow-md border border-green-100 hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-800">Status Sistem</h3>
-                {deviceStatus === 'online' ? (
-                  <Wifi className="w-6 h-6 text-green-500" />
-                ) : (
-                  <WifiOff className="w-6 h-6 text-red-500" />
-                )}
+                {getStatusIcon(deviceStatus)}
               </div>
               {loading ? (
                 <div className="animate-pulse">
@@ -158,13 +195,11 @@ export default function PetaniHome({ params }) {
                 </div>
               ) : (
                 <>
-                  <p className={`text-3xl font-bold ${
-                    deviceStatus === 'online' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {deviceStatus === 'online' ? 'Aktif' : 'Offline'}
+                  <p className={`text-3xl font-bold ${getStatusColor(deviceStatus)}`}>
+                    {getStatusText(deviceStatus)}
                   </p>
                   <p className="text-sm text-gray-500 mt-1">
-                    {deviceStatus === 'online' ? 'Sistem berjalan normal' : 'Sistem tidak aktif'}
+                    {getStatusMessage(deviceStatus)}
                   </p>
                 </>
               )}
@@ -194,7 +229,7 @@ export default function PetaniHome({ params }) {
             {/* Last Update Card */}
             <div className="bg-white p-6 rounded-2xl shadow-md border border-green-100 hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-800">Terakhir Update</h3>
+                <h3 className="text-lg font-semibold text-gray-800">Terakhir ditambahkan</h3>
                 <Clock className="w-6 h-6 text-purple-500" />
               </div>
               {loading ? (

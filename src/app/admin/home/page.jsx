@@ -4,12 +4,19 @@ import { useAuth } from '@/components/AuthContext';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Card from '@/components/Card';
-import { Users, Wifi, Calendar, BarChart3 } from 'lucide-react';
+import { Users, Wifi, Calendar, BarChart3, Clock } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { database, ref, onValue } from '@/lib/firebase';
 import Footer from '@/components/Footer';
 
 export default function AdminHome() {
   const router = useRouter();
   const { user } = useAuth();
+  
+  const [lastAddedData, setLastAddedData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  const farmerIds = [1, 2, 3]; // Daftar ID petani
 
   const cards = [
     {
@@ -25,6 +32,78 @@ export default function AdminHome() {
       icon: <BarChart3 className="w-6 h-6 text-green-500" />
     }
   ];
+
+  useEffect(() => {
+    const listeners = [];
+    const allRecords = [];
+
+    const setupListeners = async () => {
+      setLoading(true);
+      const promises = farmerIds.map(id => {
+        return new Promise(resolve => {
+          const pathRef = ref(database, `petani_${id}/pencatatan`);
+          const listener = onValue(pathRef, (snapshot) => {
+            const data = snapshot.val();
+            const records = data ? Object.values(data).map(record => ({ ...record, farmerId: id })) : [];
+            resolve(records);
+          });
+          listeners.push(listener);
+        });
+      });
+
+      Promise.all(promises).then(results => {
+        const flattenedRecords = results.flat();
+        
+        if (flattenedRecords.length > 0) {
+          const sortedRecords = flattenedRecords.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          setLastAddedData(sortedRecords[0]);
+        } else {
+          setLastAddedData(null);
+        }
+        setLoading(false);
+      });
+    };
+
+    setupListeners();
+
+    return () => {
+      listeners.forEach(unsubscribe => {
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      });
+    };
+  }, []);
+  
+  const formatDisplayDate = (timestamp) => {
+    if (!timestamp) return '-';
+    return new Date(timestamp).toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    });
+  };
+
+  const formatLastUpdate = (timestamp) => {
+    if (!timestamp) return 'Belum ada update';
+    
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(diffTime / (1000 * 60));
+    
+    if (diffDays > 0) {
+      return `${diffDays} hari yang lalu`;
+    } else if (diffHours > 0) {
+      return `${diffHours} jam yang lalu`;
+    } else if (diffMinutes > 0) {
+      return `${diffMinutes} menit yang lalu`;
+    } else {
+      return 'Baru saja';
+    }
+  };
 
   return (
     <ProtectedRoute role="admin">
@@ -60,7 +139,7 @@ export default function AdminHome() {
           </div>
 
           {/* Quick Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6"> {/* Mengubah layout menjadi 2 kolom */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white p-6 rounded-2xl shadow-md border border-green-100 hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-800">Total Petani</h3>
@@ -75,13 +154,21 @@ export default function AdminHome() {
                 <h3 className="text-lg font-semibold text-gray-800">Data Terakhir</h3>
                 <Calendar className="w-6 h-6 text-purple-500" />
               </div>
-              <p className="text-lg font-bold text-gray-800">{new Date().toLocaleDateString('id-ID', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}</p>
-              <p className="text-sm text-gray-500 mt-1">Update terakhir</p>
+              {loading ? (
+                <div className="animate-pulse">
+                  <div className="h-8 bg-gray-200 rounded mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-lg font-bold text-gray-800">
+                    {formatDisplayDate(lastAddedData?.createdAt)}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {lastAddedData ? `Terakhir ditambahkan oleh Petani ${lastAddedData.farmerId}` : 'Belum ada data'}
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </div>
