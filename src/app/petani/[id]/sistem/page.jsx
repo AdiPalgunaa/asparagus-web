@@ -74,6 +74,11 @@ export default function PetaniSistem({ params }) {
         } else {
           setDeviceStatus("offline");
         }
+      } else {
+        setDeviceStatus("offline");
+        setTemperature(0);
+        setSoilMoisture(0);
+        setLastSeen("");
       }
     });
     return () => unsubscribe();
@@ -213,13 +218,13 @@ export default function PetaniSistem({ params }) {
           </p>
           {entryData.event && (
             <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-sm font-medium flex items-center">
-              {entryData.event === "manual_watering_start" && (
+              {entryData.event === "manual" && (
                 <>
                   <Droplet className="mr-1" size={16} />
                   Siram Manual
                 </>
               )}
-              {entryData.event === "watering_start" && (
+              {entryData.event === "otomatis" && (
                 <>
                   <Droplet className="mr-1" size={16} />
                   Siram Otomatis
@@ -450,9 +455,7 @@ export default function PetaniSistem({ params }) {
                       >
                         <div className="flex items-center text-black">
                           <Clock className="mr-2 text-blue-500" size={18} />
-                          {timeKey.includes('_') ?
-                            new Date(timeKey.replace(/_/g, ':').replace('T', ' ')).toLocaleTimeString('id-ID')
-                            : timeKey}
+                          {historyData[currentDate][timeKey]?.timestamp ? new Date(historyData[currentDate][timeKey].timestamp).toLocaleTimeString('id-ID') : timeKey}
                         </div>
                         <span className="text-xs bg-white px-3 py-1 rounded-full border border-gray-200 text-blue-600 flex items-center">
                           {expandedTime === `${currentDate}-${timeKey}` ? (
@@ -536,9 +539,7 @@ export default function PetaniSistem({ params }) {
                                 >
                                   <div className="flex items-center text-black">
                                     <Clock className="mr-2 text-blue-500" size={16} />
-                                    {timeKey.includes('_') ?
-                                      new Date(timeKey.replace(/_/g, ':').replace('T', ' ')).toLocaleTimeString('id-ID')
-                                      : timeKey}
+                                    {historyData[date][timeKey]?.timestamp ? new Date(historyData[date][timeKey].timestamp).toLocaleTimeString('id-ID') : timeKey}
                                   </div>
                                   <span className="text-xs bg-white px-3 py-1 rounded-full border border-gray-200 text-blue-600 flex items-center">
                                     {expandedTime === `${date}-${timeKey}` ? (
