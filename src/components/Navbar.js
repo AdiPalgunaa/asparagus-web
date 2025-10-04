@@ -85,7 +85,7 @@ export default function Navbar() {
 
             {/* Brand Name */}
             <div className="hidden md:block">
-              <span className="text-xl font-bold text-gray-800 leading-tight">
+              <span className="text-xl font-bold text-white leading-tight">
                 Sistem Asparagus
               </span>
             </div>

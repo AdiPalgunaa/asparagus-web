@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/components/AuthContext';
 import Navbar from '@/components/Navbar';
 import { database, ref, onValue, set, update } from '@/lib/firebase';
-import { Plus, Filter, RotateCcw, CheckCircle, Clock, Trash2, User, Calendar, BarChart3 } from 'lucide-react';
+import { Plus, Filter, RotateCcw, CheckCircle, Clock, Trash2, User, Calendar, BarChart3, Download } from 'lucide-react';
 import Footer from '@/components/Footer';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function AdminPencatatan() {
   const [formData, setFormData] = useState({
@@ -21,6 +23,9 @@ export default function AdminPencatatan() {
   const [loading, setLoading] = useState(false);
   const [recordsLoading, setRecordsLoading] = useState(true);
   
+  const [exportStart, setExportStart] = useState("");
+  const [exportEnd, setExportEnd] = useState("");
+
   const { user } = useAuth();
 
   useEffect(() => {
@@ -181,6 +186,138 @@ export default function AdminPencatatan() {
     });
   };
 
+  const handleExport = () => {
+    // Filter data terverifikasi
+    let exportData = allRecords.filter(r => r.status === "verified");
+
+    // Filter berdasarkan rentang tanggal jika diisi
+    if (exportStart && exportEnd) {
+      const startDate = new Date(exportStart);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(exportEnd);
+      endDate.setHours(23, 59, 59, 999);
+      
+      exportData = exportData.filter(r => {
+        const recordDate = new Date(r.tanggal);
+        recordDate.setHours(0, 0, 0, 0);
+        return recordDate >= startDate && recordDate <= endDate;
+      });
+    }
+
+    // Cek apakah ada data
+    if (exportData.length === 0) {
+      alert("Tidak ada data terverifikasi untuk rentang tanggal ini.");
+      return;
+    }
+
+    // Urutkan data berdasarkan tanggal (terlama ke terbaru)
+    exportData.sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+
+    // Buat PDF
+    const doc = new jsPDF();
+
+    // Header
+    doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
+    doc.text("Laporan Pencatatan Panen Terverifikasi", 14, 20);
+    
+    // Informasi rentang tanggal
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    if (exportStart && exportEnd) {
+      const startDateFormatted = new Date(exportStart).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+      const endDateFormatted = new Date(exportEnd).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+      doc.text(`Periode: ${startDateFormatted} - ${endDateFormatted}`, 14, 27);
+    } else {
+      doc.text(`Semua Data Terverifikasi`, 14, 27);
+    }
+
+    // Tanggal export
+    const exportDate = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    doc.text(`Dicetak: ${exportDate}`, 14, 33);
+
+    // Siapkan data tabel
+    const tableData = exportData.map((r, idx) => [
+      idx + 1,
+      `Petani ${r.petani}`,
+      new Date(r.tanggal).toLocaleDateString("id-ID", {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      }),
+      getKelasLabel(r.kelas),
+      r.jumlah + " kg",
+      r.verifiedBy || "-",
+      r.verifiedAt ? new Date(r.verifiedAt).toLocaleDateString("id-ID", {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      }) : "-"
+    ]);
+
+    // Hitung total per kelas
+    const totalA = exportData.filter(r => r.kelas === 'a').reduce((sum, r) => sum + r.jumlah, 0);
+    const totalB = exportData.filter(r => r.kelas === 'b').reduce((sum, r) => sum + r.jumlah, 0);
+    const totalC = exportData.filter(r => r.kelas === 'c').reduce((sum, r) => sum + r.jumlah, 0);
+    const totalSemua = totalA + totalB + totalC;
+
+    // Buat tabel
+    doc.autoTable({
+      head: [["No", "Petani", "Tanggal", "Kelas", "Jumlah", "Diverifikasi Oleh", "Tgl Verifikasi"]],
+      body: tableData,
+      startY: 40,
+      styles: {
+        fontSize: 9,
+        cellPadding: 3
+      },
+      headStyles: {
+        fillColor: [34, 197, 94],
+        textColor: 255,
+        fontStyle: 'bold'
+      },
+      alternateRowStyles: {
+        fillColor: [240, 253, 244]
+      }
+    });
+
+    // Tambahkan ringkasan
+    const finalY = doc.lastAutoTable.finalY + 10;
+    
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text("Ringkasan:", 14, finalY);
+    
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Total Kelas A: ${totalA} kg`, 14, finalY + 7);
+    doc.text(`Total Kelas B: ${totalB} kg`, 14, finalY + 14);
+    doc.text(`Total Kelas C: ${totalC} kg`, 14, finalY + 21);
+    
+    doc.setFont(undefined, 'bold');
+    doc.text(`Total Semua Kelas: ${totalSemua} kg`, 14, finalY + 28);
+
+    // Simpan PDF
+    const fileName = exportStart && exportEnd 
+      ? `laporan_pencatatan_${exportStart}_${exportEnd}.pdf`
+      : `laporan_pencatatan_${Date.now()}.pdf`;
+    
+    doc.save(fileName);
+  };
+
   return (
     <ProtectedRoute role="admin">
       <div className="min-h-screen flex flex-col bg-gradient-to-br from-green-100 via-emerald-50 to-green-200">
@@ -201,6 +338,47 @@ export default function AdminPencatatan() {
 
         {/* Content */}
         <div className="max-w-7xl mx-auto px-6 py-10 flex-1 w-full">
+          {/* Form Export */}
+          <div className="bg-white rounded-2xl shadow-md border border-green-100 p-6 mb-8">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+              <Download className="mr-2 text-blue-500" size={20} />
+              Export Data Terverifikasi
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Dari Tanggal
+                </label>
+                <input
+                  type="date"
+                  value={exportStart}
+                  onChange={(e) => setExportStart(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sampai Tanggal
+                </label>
+                <input
+                  type="date"
+                  value={exportEnd}
+                  onChange={(e) => setExportEnd(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+              <div>
+                <button
+                  onClick={handleExport}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-xl flex items-center justify-center transition-colors"
+                >
+                  <Download className="mr-2" size={18} />
+                  Export PDF
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Form Pencatatan */}
           <div className="bg-white rounded-2xl shadow-md border border-green-100 overflow-hidden transition-all hover:shadow-lg mb-8">
             <div className="p-6">
