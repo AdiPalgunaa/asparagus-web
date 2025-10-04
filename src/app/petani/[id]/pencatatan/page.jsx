@@ -11,7 +11,7 @@ import Footer from '@/components/Footer';
 export default function PetaniPencatatan({ params }) {
   const [formData, setFormData] = useState({
     tanggal: new Date().toISOString().split('T')[0],
-    kelas: 'a',
+    kelas: 'super',
     jumlah: ''
   });
   const [records, setRecords] = useState([]);
@@ -61,7 +61,7 @@ export default function PetaniPencatatan({ params }) {
       
       setFormData({
         tanggal: new Date().toISOString().split('T')[0],
-        kelas: 'a',
+        kelas: 'super',
         jumlah: ''
       });
     } catch (error) {
@@ -107,6 +107,7 @@ export default function PetaniPencatatan({ params }) {
 
   const getKelasLabel = (kelas) => {
     switch (kelas) {
+      case 'super': return 'Kelas Super';
       case 'a': return 'Kelas A';
       case 'b': return 'Kelas B';
       case 'c': return 'Kelas C';
@@ -129,7 +130,7 @@ export default function PetaniPencatatan({ params }) {
       <div className="min-h-screen flex flex-col bg-gradient-to-br from-green-100 via-emerald-50 to-green-200">
         <Navbar />
 
-        {/* Header Section (New) */}
+        {/* Header Section */}
         <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white py-10 pt-25 shadow-md">
           <div className="max-w-7xl mx-auto px-6 flex items-center gap-4">
             <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-lg">
@@ -213,6 +214,7 @@ export default function PetaniPencatatan({ params }) {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-green-500 focus:border-green-500"
                     required
                   >
+                    <option value="super">Kelas Super</option>
                     <option value="a">Kelas A</option>
                     <option value="b">Kelas B</option>
                     <option value="c">Kelas C</option>

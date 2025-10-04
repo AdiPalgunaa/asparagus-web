@@ -7,13 +7,13 @@ import { database, ref, onValue, set, update } from '@/lib/firebase';
 import { Plus, Filter, RotateCcw, CheckCircle, Clock, Trash2, User, Calendar, BarChart3, Download } from 'lucide-react';
 import Footer from '@/components/Footer';
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import "jspdf-autotable";
 
 export default function AdminPencatatan() {
   const [formData, setFormData] = useState({
     petani: '1',
     tanggal: new Date().toISOString().split('T')[0],
-    kelas: 'a',
+    kelas: 'super',
     jumlah: '',
     status: 'verified'
   });
@@ -93,7 +93,7 @@ export default function AdminPencatatan() {
       setFormData({
         petani: '1',
         tanggal: new Date().toISOString().split('T')[0],
-        kelas: 'a',
+        kelas: 'super',
         jumlah: '',
         status: 'verified'
       });
@@ -169,6 +169,7 @@ export default function AdminPencatatan() {
 
   const getKelasLabel = (kelas) => {
     switch (kelas) {
+      case 'super': return 'Kelas Super';
       case 'a': return 'Kelas A';
       case 'b': return 'Kelas B';
       case 'c': return 'Kelas C';
@@ -270,10 +271,11 @@ export default function AdminPencatatan() {
     ]);
 
     // Hitung total per kelas
+    const totalSuper = exportData.filter(r => r.kelas === 'super').reduce((s, r) => s + r.jumlah, 0);
     const totalA = exportData.filter(r => r.kelas === 'a').reduce((sum, r) => sum + r.jumlah, 0);
     const totalB = exportData.filter(r => r.kelas === 'b').reduce((sum, r) => sum + r.jumlah, 0);
     const totalC = exportData.filter(r => r.kelas === 'c').reduce((sum, r) => sum + r.jumlah, 0);
-    const totalSemua = totalA + totalB + totalC;
+    const totalSemua = totalSuper + totalA + totalB + totalC;
 
     // Buat tabel
     doc.autoTable({
@@ -303,12 +305,13 @@ export default function AdminPencatatan() {
     
     doc.setFontSize(10);
     doc.setFont(undefined, 'normal');
-    doc.text(`Total Kelas A: ${totalA} kg`, 14, finalY + 7);
-    doc.text(`Total Kelas B: ${totalB} kg`, 14, finalY + 14);
-    doc.text(`Total Kelas C: ${totalC} kg`, 14, finalY + 21);
+    doc.text(`Total Kelas Super: ${totalSuper} kg`, 14, finalY + 7);
+    doc.text(`Total Kelas A: ${totalA} kg`, 14, finalY + 14);
+    doc.text(`Total Kelas B: ${totalB} kg`, 14, finalY + 21);
+    doc.text(`Total Kelas C: ${totalC} kg`, 14, finalY + 28);
     
     doc.setFont(undefined, 'bold');
-    doc.text(`Total Semua Kelas: ${totalSemua} kg`, 14, finalY + 28);
+    doc.text(`Total Semua Kelas: ${totalSemua} kg`, 14, finalY + 35);
 
     // Simpan PDF
     const fileName = exportStart && exportEnd 
@@ -435,6 +438,7 @@ export default function AdminPencatatan() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-green-500 focus:border-green-500"
                     required
                   >
+                    <option value="super">Kelas Super</option>
                     <option value="a">Kelas A</option>
                     <option value="b">Kelas B</option>
                     <option value="c">Kelas C</option>
